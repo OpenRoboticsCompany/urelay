@@ -1,0 +1,12 @@
+{application, urelay,
+ [
+  {description, ""},
+  {vsn, "1"},
+  {registered, []},
+  {applications, [
+                  kernel,
+                  stdlib
+                 ]},
+  {mod, { urelay_app, []}},
+  {env, []}
+ ]}.
