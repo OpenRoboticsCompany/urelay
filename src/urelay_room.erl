@@ -115,7 +115,7 @@ handle_call( _Message, _From, Room ) ->
 handle_cast( _Message, Room ) ->
 	{ noreply, Room }.
 
-handle_info({ udp, _Client, IPAddr, Port, Packet }, Room = #room{ users = Users, bans = Bans, socket = Socket }) ->
+handle_info({ udp, _Client, IPAddr, Port, Packet }, Room = #room{ users = Users, bans = Bans, peers = Peers, socket = Socket }) ->
 	case member(IPAddr,Port,Bans) of
 		true -> io:format("[Banned] ~p:~p ~p~n", [ IPAddr,Port,Packet]);
 		false -> false
@@ -123,7 +123,8 @@ handle_info({ udp, _Client, IPAddr, Port, Packet }, Room = #room{ users = Users,
 	case member(IPAddr,Port,Users) of
 		true -> 
 			io:format("[Relay] ~p:~p ~p~n", [ IPAddr,Port,Packet]),
-			[ broadcast(Socket,U,Packet) || U <- except(IPAddr,Port,Users) ];
+			[ broadcast(Socket,U,Packet) || U <- except(IPAddr,Port,Users) ],
+			[ relay(Socket,P,Packet) || P <- Peers];
 		false -> false
 	end,
 	{ noreply, Room };
