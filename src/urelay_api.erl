@@ -1,6 +1,6 @@
 -module(urelay_api).
 -author({ "David J Goehrig", "dave@dloh.org" }).
--copyright(<<"(C) 2016 David J. Goehrig"/utf8>>).
+-copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
 -export([ start_link/1, close/0, rooms/0 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
