@@ -1,6 +1,6 @@
 -module(urelay_room).
 -author({ "David J Goehrig", "dave@dloh.org" }).
--copyright(<<"(C) 2016 David J. Goehrig"/utf8>>).
+-copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
 -export([ start_link/2, 
 	join/2, leave/2, ban/2, unban/2, peer/2,

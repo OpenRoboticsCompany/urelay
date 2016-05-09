@@ -6,7 +6,7 @@
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2,
 	init/1, terminate/2 ]).
 
--record(relay, { room, server, wsport, socket, port, websockets }).
+-record(relay, { room, wssuper, wsport, socket, port, websockets }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Public Methods
@@ -20,7 +20,9 @@ close() ->
 
 relay(WebSocket,Data) ->
 	io:format("Relay called ~p~n", [ Data ]),
-	gen_server:call(?MODULE, { relay, WebSocket, Data }).
+	JSON = json:decode(Data),
+	UJSON = ujson:encode(JSON),
+	gen_server:call(?MODULE, { relay, WebSocket, UJSON }).
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -28,11 +30,11 @@ relay(WebSocket,Data) ->
 %%
 
 init([ Room, WSPort, Port ]) ->
-	{ ok, Server } = websocket_server:start_link(?MODULE,relay,WSPort),
+	{ ok, Super } = urelay_websocket_supervisor:start_link(WSPort),
 	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }]),
 	{ ok, #relay{
 		room = Room,
-		server = Server, wsport = WSPort,
+		wssuper = Super, wsport = WSPort,
 		socket = Socket, port = Port,
 		websockets = sets:new() }}.
 
@@ -55,7 +57,9 @@ handle_cast( Message, Relay ) ->
 
 handle_info({ udp, _Client, IPAddr, Port, Packet }, Relay = #relay{ websockets = WebSockets }) ->
 	io:format("Got message from ~p:~p", [ IPAddr, Port ]),
-	[ websocket:send(W,Packet) || W <- sets:to_list(WebSockets) ],
+	{ UJSON, _Rem }= ujson:decode(Packet),
+	JSON = json:encode(UJSON),
+	[ websocket:send(W,JSON) || W <- sets:to_list(WebSockets) ],
 	{ noreply, Relay };
 
 handle_info(Message,Relay) ->
