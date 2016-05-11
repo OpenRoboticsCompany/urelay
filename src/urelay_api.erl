@@ -2,7 +2,7 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/1, close/0, rooms/0 ]).
+-export([ start_link/1, stop/0, rooms/0 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
@@ -15,7 +15,7 @@
 start_link(Port) ->
 	gen_server:start_link( { local, api }, ?MODULE, [ Port ], []).
 
-close() ->
+stop() ->
 	gen_server:call(api,stop).
 
 rooms() ->
@@ -25,11 +25,11 @@ rooms() ->
 % Private API
 %
 
-init([ Port ]) ->
+init(API = #api{ port = Port }) ->
 	io:format("Starting api on port ~p~n", [ Port ]),
 	{ ok, Socket } = gen_udp:open(Port,[ binary, { active, true }]),
 	{ ok, Super } = urelay_room_supervisor:start_link(),
-	{ ok, #api{ socket = Socket, rooms = [], supervisor = Super } }.
+	{ ok, API#api{ socket = Socket, rooms = [], supervisor = Super } }.
 
 handle_call(stop,_From,API) ->
 	{ stop, ok, API };
