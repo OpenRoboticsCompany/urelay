@@ -2,7 +2,7 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/1, stop/0 ]).
+-export([ start_link/1, stop/0, clients/0 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
@@ -19,6 +19,9 @@ start_link(Port) ->
 stop() ->
 	gen_server:call(ui,stop).
 
+clients() ->
+	gen_server:call(ui,clients).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Private API
@@ -27,20 +30,24 @@ stop() ->
 init( UI = #ui{ port = Port }) ->
 	{ ok, Socket } = gen_tcp:listen(Port, [ binary, { active, true }, 
 		{ reuseaddr, true }, { keepalive, true } ]),
-	gen_server:cast(ui,accept),
-	{ ok, UI#ui{ socket = Socket, clients = [] }}.
+	process_flag(trap_exit, true),
+	Pid =  spawn_link(urelay_ui_client,accept, [ Socket ]),
+	{ ok, UI#ui{ socket = Socket, clients = [ Pid ] }}.
 		
 handle_call(stop,_From,UI) ->
 	{ stop, stopped, UI };
+
+handle_call(clients,_From,UI = #ui{ clients = Clients }) ->
+	{ reply, Clients, UI };
 
 handle_call(Message,_From,UI) ->
 	io:format("Unknown message ~p~n", [ Message ]),
 	{ reply, ok, UI }.
 
-handle_cast(accept,UI = #ui{ socket = Listen, clients = Clients }) ->
-	spawn(urelay_ui_client,accept, Listen),
-	gen_server:cast(ui,accept),
-	{ noreply,  UI#ui{ clients = [ Socket | Clients ] }};
+handle_cast(accept,UI = #ui{ socket = Socket, clients = Clients }) ->
+	Pid = spawn_link(urelay_ui_client,accept, [ Socket ]),
+	io:format("Spawning new client ~p~n", [ Pid ]),
+	{ noreply,  UI#ui{ clients = [ Pid | Clients ] }};
 
 handle_cast(Message,UI) ->
 	io:format("Unknown message ~p~n", [ Message ]),
@@ -51,9 +58,13 @@ handle_info({ tcp, Client, Message }, UI ) ->
 	gen_tcp:send(Client,"HTTP/1.1 200 OK\n\nhello world"),
 	{ noreply, UI };
 
-handle_info({ tcp_closed, Client }, UI = #ui{ clients = Clients }) ->
-	io:format("~p disconnected~n", [ Client ]),
-	{ noreply, UI#ui{ clients = lists:delete(Client,Clients) }};
+handle_info({ tcp_closed, Socket }, UI) ->
+	io:format("Listen ~p closed~n", [ Socket ]),
+	{ stop, closed, UI };
+
+handle_info({'EXIT', Pid, Reason }, UI = #ui{ clients = Clients }) ->
+	io:format("client ~p exited ~p~n", [ Pid, Reason ]),
+	{ noreply, UI#ui{ clients = lists:delete(Pid,Clients) }};
 
 handle_info(Message,UI) ->
 	io:format("Unknown message ~p~n", [ Message ]),
