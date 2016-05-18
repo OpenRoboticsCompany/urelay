@@ -41,7 +41,7 @@ handle_call(clients,_From,UI = #ui{ clients = Clients }) ->
 	{ reply, Clients, UI };
 
 handle_call(Message,_From,UI) ->
-	io:format("Unknown message ~p~n", [ Message ]),
+	io:format("[UI] Unknown message ~p~n", [ Message ]),
 	{ reply, ok, UI }.
 
 handle_cast(accept,UI = #ui{ socket = Socket, clients = Clients }) ->
@@ -50,7 +50,7 @@ handle_cast(accept,UI = #ui{ socket = Socket, clients = Clients }) ->
 	{ noreply,  UI#ui{ clients = [ Pid | Clients ] }};
 
 handle_cast(Message,UI) ->
-	io:format("Unknown message ~p~n", [ Message ]),
+	io:format("[UI] Unknown message ~p~n", [ Message ]),
 	{ noreply, UI }.
 
 handle_info({ tcp_closed, Socket }, UI) ->
@@ -62,7 +62,7 @@ handle_info({'EXIT', Pid, Reason }, UI = #ui{ clients = Clients }) ->
 	{ noreply, UI#ui{ clients = lists:delete(Pid,Clients) }};
 
 handle_info(Message,UI) ->
-	io:format("Unknown message ~p~n", [ Message ]),
+	io:format("[UI] Unknown message ~p~n", [ Message ]),
 	{ noreply, UI }.
 
 terminate(Reason, #ui{ socket = Socket }) ->
