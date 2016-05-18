@@ -18,6 +18,12 @@ start_link(Room,WSPort,Port) ->
 close() ->
 	gen_server:call(?MODULE, close).
 
+relay(WebSocket,connected) ->
+	gen_server:call(?MODULE, { relay, WebSocket, connected });
+
+relay(WebSocket,closed) ->
+	gen_server:call(?MODULE, { relay, WebSocket, closed });
+
 relay(WebSocket,Data) ->
 	io:format("Relay called ~p~n", [ Data ]),
 	JSON = json:decode(Data),
@@ -31,7 +37,7 @@ relay(WebSocket,Data) ->
 
 init([ Room, WSPort, Port ]) ->
 	{ ok, Super } = urelay_websocket_supervisor:start_link(WSPort),
-	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }]),
+	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }, { recbuf, 65536 }]),
 	{ ok, #relay{
 		room = Room,
 		wssuper = Super, wsport = WSPort,
@@ -41,12 +47,20 @@ init([ Room, WSPort, Port ]) ->
 handle_call( close, _From, Relay ) ->
 	{ stop, closed, Relay };
 
+handle_call( { relay, WebSocket, connected  }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort }, websockets = WebSockets }) ->
+	io:format("[Relay] connected~n"),
+	 { reply, ok, #relay{ websockets = sets:add_element(WebSocket,WebSockets) }};
+
+handle_call( { relay, WebSocket, closed  }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort }, websockets = WebSockets }) ->
+	io:format("[Relay] closed~n"),
+	 { reply, ok, #relay{ websockets = sets:del_element(WebSocket,WebSockets) }};
+
+
 handle_call( { relay, WebSocket, Data }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort }, websockets = WebSockets }) ->
 	io:format("Relay ~p to ~p:~p~n", [ Data, RoomIP, RoomPort ]),
 	gen_udp:send( Socket, RoomIP, RoomPort, Data ),
-	{ reply, ok, Relay#relay{ websockets = sets:add_element(WebSocket,WebSockets) }};
+	{ reply, ok, Relay };
 	
-
 handle_call( Message, _From, Relay ) ->
 	io:format("Unknown message ~p~n", [ Message ]),
 	{ reply, ok, Relay }.
@@ -56,9 +70,10 @@ handle_cast( Message, Relay ) ->
 	{ noreply, Relay }.
 
 handle_info({ udp, _Client, IPAddr, Port, Packet }, Relay = #relay{ websockets = WebSockets }) ->
-	io:format("Got message from ~p:~p", [ IPAddr, Port ]),
+	io:format("Got message from ~p:~p~n", [ IPAddr, Port ]),
 	{ UJSON, _Rem }= ujson:decode(Packet),
 	JSON = json:encode(UJSON),
+	io:format("Sending ~p~n", [ JSON ]),
 	[ websocket:send(W,JSON) || W <- sets:to_list(WebSockets) ],
 	{ noreply, Relay };
 

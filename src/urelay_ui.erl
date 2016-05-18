@@ -53,11 +53,6 @@ handle_cast(Message,UI) ->
 	io:format("Unknown message ~p~n", [ Message ]),
 	{ noreply, UI }.
 
-handle_info({ tcp, Client, Message }, UI ) ->
-	io:format("~p~n", [ Message ]),
-	gen_tcp:send(Client,"HTTP/1.1 200 OK\n\nhello world"),
-	{ noreply, UI };
-
 handle_info({ tcp_closed, Socket }, UI) ->
 	io:format("Listen ~p closed~n", [ Socket ]),
 	{ stop, closed, UI };
