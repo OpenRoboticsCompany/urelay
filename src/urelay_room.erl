@@ -60,7 +60,7 @@ close(Room) ->
 
 init([ Name, Port ]) ->
 	io:format("Starting room ~p on port ~p~n", [ Name, Port ]),
-	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }]),
+	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }, { recbuf, 65536} ]),
 	{ ok, #room{ name = Name, users = [], bans = [], peers = [], 
 		port = Port, socket = Socket }}.
 
