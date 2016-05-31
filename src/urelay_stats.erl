@@ -2,7 +2,7 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1, sum/1, average/1 ]).
+-export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1, sum/1, average/1, minimum/1, maximum/1 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
@@ -35,6 +35,12 @@ sum(Stat) ->
 
 average(Stat) ->
 	gen_server:call(?MODULE, { avg, Stat }).
+
+minimum(Stat) ->
+	gen_server:call(?MODULE, { min, Stat }).
+
+maximum(Stat) ->
+	gen_server:call(?MODULE, { max, Stat }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Private APU
@@ -73,6 +79,20 @@ handle_call({ avg, Stat }, _From, Stats = #stats{ windows = Windows }) ->
 		none -> Avg = 0
 	end,
 	{ reply, Avg, Stats };
+
+handle_call({ min, Stat }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+			{ Stat, [H|T] } -> Min = lists:foldl(fun(A,B) -> min(A,B) end, H, T);
+		none -> Min = 0
+	end,
+	{ reply, Min, Stats };
+
+handle_call({ max, Stat }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+			{ Stat, [H|T] } -> Max = lists:foldl(fun(A,B) -> max(A,B) end, H, T);
+		none -> Max = 0
+	end,
+	{ reply, Max, Stats };
 
 handle_call(Message,_From,Stats) ->
 	io:format("[stats] unknown message ~p~n", [ Message ]),
