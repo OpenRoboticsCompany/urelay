@@ -2,11 +2,11 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/0, stop/0, log/2, dump/0 ]).
+-export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
--record(stats, { windows, size }).
+-record(stats, { windows, sizes }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Public APU
@@ -18,19 +18,24 @@ start_link() ->
 stop() ->
 	gen_server:call(?MODULE,stop).
 
+allot(Stat,Size) ->
+	gen_server:call(?MODULE, { allot, Stat, Size }).
+
 log(Stat,Value) ->
 	gen_server:call(?MODULE, { log, Stat, Value }).
 
 dump() ->
 	gen_server:call(?MODULE, dump).
 
+clear(Stat) ->
+	gen_server:call(?MODULE, { clear, Stat }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Private APU
 %
 
 init([]) ->
-	{ ok, #stats{ windows = [], size = 10 }}.
+	{ ok, #stats{ windows = [], sizes = [] }}.
 
 handle_call(stop,_From,Stats) ->
 	{ stop, stopped, Stats };
@@ -40,12 +45,14 @@ handle_call(dump, _From, Stats = #stats{ windows = Windows }) ->
 		Windows),
 	{ reply, ok, Stats };
 
-handle_call({ log, Stat, Value }, _From, Stats = #stats{ windows = Windows, size = Size }) ->
-	case proplists:lookup(Stat,Windows) of 
-		{ Stat, Values } -> [ _H | T ] = Values;
-		none ->  T = [ 0 || _X <- lists:seq(2,Size) ]
-	end,	
-	{ reply, ok, Stats#stats{ windows = [ { Stat, T ++ [Value] } | proplists:delete(Stat,Windows) ]}};
+handle_call({ allot, Stat, Size}, _From, Stats) ->
+	{ reply, ok, allocate(Stats,Stat,Size) };
+
+handle_call({ log, Stat, Value }, _From, Stats) ->
+	{ reply, ok, rotate(Stats,Stat,Value) };
+
+handle_call({ clear, Stat }, _From, Stats) ->
+	{ reply, ok, reset(Stats,Stat) };
 
 handle_call(Message,_From,Stats) ->
 	io:format("[stats] unknown message ~p~n", [ Message ]),
@@ -64,3 +71,28 @@ code_change(_Old,_Extra,Stats) ->
 
 terminate(_Reason,_Stats) ->
 	ok.
+
+populate(Size) ->
+	[ 0 || _X <- lists:seq(1,Size) ].
+
+allocate(Stats = #stats{ windows = Windows, sizes = Sizes },Stat,Size) ->
+	Stats#stats{
+		windows = [ { Stat, populate(Size) } | proplists:delete(Stat,Windows) ],
+		sizes = [ { Stat, Size } | proplists:delete(Stat,Sizes) ]
+	}.
+
+rotate(Stats = #stats{ windows = Windows }, Stat, Value) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, Values } -> [ _H | T ] = Values;
+		none -> T = []	%% assume we are only tracking a single value
+	end,	
+	Stats#stats{ windows = [ { Stat, T ++ [Value] } | proplists:delete(Stat,Windows) ]}.
+
+reset(Stats = #stats{ windows = Windows, sizes = Sizes }, Stat) ->
+	case proplists:lookup(Stat,Sizes) of
+		{ Stat, Size } -> Window = populate(Size);
+		none -> Window = [0]
+	end,
+	Stats#stats{ windows =  [ { Stat, Window } | proplists:delete(Stat,Windows) ]}.
+
+
