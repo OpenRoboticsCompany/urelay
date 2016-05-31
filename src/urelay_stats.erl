@@ -2,7 +2,7 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1 ]).
+-export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1, sum/1, average/1 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
@@ -30,6 +30,12 @@ dump() ->
 clear(Stat) ->
 	gen_server:call(?MODULE, { clear, Stat }).
 
+sum(Stat) ->
+	gen_server:call(?MODULE, { sum, Stat }).
+
+average(Stat) ->
+	gen_server:call(?MODULE, { avg, Stat }).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Private APU
 %
@@ -53,6 +59,20 @@ handle_call({ log, Stat, Value }, _From, Stats) ->
 
 handle_call({ clear, Stat }, _From, Stats) ->
 	{ reply, ok, reset(Stats,Stat) };
+
+handle_call({ sum, Stat }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, Values } -> Sum = lists:foldl(fun(A,B) -> A+B end, 0, Values);
+		none -> Sum = 0
+	end,
+	{ reply, Sum, Stats };
+
+handle_call({ avg, Stat }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, Values } -> Avg = lists:foldl(fun(A,B) -> A+B end, 0, Values)/length(Values);
+		none -> Avg = 0
+	end,
+	{ reply, Avg, Stats };
 
 handle_call(Message,_From,Stats) ->
 	io:format("[stats] unknown message ~p~n", [ Message ]),
@@ -94,5 +114,6 @@ reset(Stats = #stats{ windows = Windows, sizes = Sizes }, Stat) ->
 		none -> Window = [0]
 	end,
 	Stats#stats{ windows =  [ { Stat, Window } | proplists:delete(Stat,Windows) ]}.
+
 
 
