@@ -28,7 +28,7 @@ evoke(Cmd) ->
 	gen_udp:send(Socket,{127,0,0,1},5678, Cmd),
 	receive 
 		{ udp, _Socket, _IPAddr, _Port, Packet } ->
-			{ Resp, Rem } = ujson:decode(Packet),
+			{ Resp, _Rem } = ujson:decode(Packet),
 			io:format("~p~n", [ Resp ])
 	after	
 		1000 ->

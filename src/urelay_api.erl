@@ -27,7 +27,7 @@ rooms() ->
 %
 
 init(API = #api{ port = Port }) ->
-	io:format("Starting api on port ~p~n", [ Port ]),
+	urelay_log:log(?MODULE,"Starting api on port ~p~n", [ Port ]),
 	{ ok, Socket } = gen_udp:open(Port,[ binary, { active, true }]),
 	{ ok, Super } = urelay_room_supervisor:start_link(),
 	{ ok, API#api{ socket = Socket, rooms = [], supervisor = Super } }.
@@ -47,17 +47,20 @@ handle_cast(Message,API) ->
 	{ noreply, API }.
 
 handle_info({ udp, _Client, IPAddr, Port, Packet }, API) ->
-	io:format("Got packet ~p~n", [ Packet ]),
+	urelay_log:log(?MODULE,"Got packet ~p~n", [ Packet ]),
+	urelay_stats:increment(api_packets_in),
+	urelay_stats:add(api_bytes_in,size(Packet)),
 	{ Command, _Rem } = ujson:decode(Packet),
-	io:format("Got command ~p from ~p:~p ~n", [ Command, IPAddr, Port ]),
+	urelay_log:log(?MODULE,"Got command ~p from ~p:~p ~n", [ Command, IPAddr, Port ]),
+	urelay_stats:increment(api_calls),
 	dispatch(API,IPAddr,Port,Command);
 
 handle_info(Message,API) ->
-	io:format("Got message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"Got message ~p~n", [ Message ]),
 	{ noreply, API }.	
 
 terminate(Reason,API = #api{ socket = Socket }) ->
-	io:format("Stopping ~p because ~p~n", [ API, Reason ]),
+	urelay_log:log(?MODULE,"Stopping ~p because ~p~n", [ API, Reason ]),
 	gen_udp:close(Socket),
 	ok.
 
@@ -69,17 +72,26 @@ dispatch(API = #api{ supervisor = Super, rooms = Rooms, socket = Socket },IPAddr
 		"start" -> 
 			[ RoomName, RoomPort ] = Args,
 			urelay_room_supervisor:start_room(Super,RoomName,RoomPort),
-			gen_udp:send(Socket,IPAddr,Port, ujson:encode([ "started", RoomName ])),	
+			urelay_stats:increment(rooms),
+			Message = ujson:encode([ "started", RoomName ]),
+			gen_udp:send(Socket,IPAddr,Port, Message),	
+			urelay_stats:add(api_bytes_out,size(Message)), 
 			{ noreply, API#api{ rooms = [ RoomName | Rooms ] }};
 		"stop" -> 
 			[ RoomName ] = Args,
 			urelay_room_supervisor:stop_room(Super,RoomName),
-			gen_udp:send(Socket,IPAddr,Port, ujson:encode([ "stoped", RoomName ])),	
+ 			Message = ujson:encode([ "stoped", RoomName ]),
+			gen_udp:send(Socket,IPAddr,Port,Message),	
+			urelay_stats:add(api_bytes_out,size(Message)), 
+			urelay_stats:decrement(rooms),
 			{ noreply, API#api{ rooms = lists:delete(RoomName,Rooms) }};
 		"rooms" -> 
-			gen_udp:send(Socket,IPAddr,Port, ujson:encode([ "rooms", Rooms ])),	
+			Message = ujson:encode([ "rooms", Rooms ]),
+			gen_udp:send(Socket,IPAddr,Port,Message),	
+			urelay_stats:add(api_bytes_out,size(Message)),
 			{ noreply, API };
 		_ -> 
-			io:format("unknown command ~p~n", [ Command ]),
+			urelay_log:log(?MODULE,"unknown command ~p~n", [ Command ]),
+			urelay_stats:increment(api_unknown_command),
 			{ noreply, API }
 	end.

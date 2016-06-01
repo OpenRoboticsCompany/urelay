@@ -2,7 +2,7 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1, sum/1, average/1, minimum/1, maximum/1 ]).
+-export([ start_link/0, stop/0, log/2, dump/0, allot/2, clear/1, sum/1, average/1, minimum/1, maximum/1, increment/1, decrement/1, add/2, sub/2 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
@@ -42,6 +42,18 @@ minimum(Stat) ->
 maximum(Stat) ->
 	gen_server:call(?MODULE, { max, Stat }).
 
+increment(Stat) ->
+	gen_server:call(?MODULE, { inc, Stat }).
+
+decrement(Stat) ->
+	gen_server:call(?MODULE, { dec, Stat }).
+
+add(Stat,Value) ->
+	gen_server:call(?MODULE, { add, Stat, Value }).
+
+sub(Stat,Value) ->
+	gen_server:call(?MODULE, { sub, Stat, Value }).
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Private APU
 %
@@ -53,7 +65,7 @@ handle_call(stop,_From,Stats) ->
 	{ stop, stopped, Stats };
 
 handle_call(dump, _From, Stats = #stats{ windows = Windows }) ->
-	lists:map(fun ({K,V}) -> io:format("~p = ~p~n", [ K, V]) end,
+	lists:map(fun ({K,V}) -> urelay_log:log(?MODULE,"~p = ~p~n", [ K, V]) end,
 		Windows),
 	{ reply, ok, Stats };
 
@@ -82,7 +94,7 @@ handle_call({ avg, Stat }, _From, Stats = #stats{ windows = Windows }) ->
 
 handle_call({ min, Stat }, _From, Stats = #stats{ windows = Windows }) ->
 	case proplists:lookup(Stat,Windows) of 
-			{ Stat, [H|T] } -> Min = lists:foldl(fun(A,B) -> min(A,B) end, H, T);
+		{ Stat, [H|T] } -> Min = lists:foldl(fun(A,B) -> min(A,B) end, H, T);
 		none -> Min = 0
 	end,
 	{ reply, Min, Stats };
@@ -94,16 +106,44 @@ handle_call({ max, Stat }, _From, Stats = #stats{ windows = Windows }) ->
 	end,
 	{ reply, Max, Stats };
 
+handle_call({ inc, Stat }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, [ H | _T ] } -> V = H + 1;
+		none -> V = 1
+	end,
+	{ reply, V, rotate(Stats,Stat,V) };
+
+handle_call({ dec, Stat }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, [ H | _T ] } -> V = max(H - 1,0);
+		none -> V = 0		% we can't go below 0
+	end,
+	{ reply, V, rotate(Stats,Stat,V) };
+
+handle_call({ add, Stat, Value }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, [ H | _T ] } -> V = H + Value ;
+		none -> V = Value	
+	end,
+	{ reply, V, rotate(Stats,Stat,V) };
+
+handle_call({ sub, Stat, Value }, _From, Stats = #stats{ windows = Windows }) ->
+	case proplists:lookup(Stat,Windows) of 
+		{ Stat, [ H | _T ] } -> V = max(H - Value,0);
+		none -> V = 0	
+	end,
+	{ reply, V, rotate(Stats,Stat,V) };
+
 handle_call(Message,_From,Stats) ->
-	io:format("[stats] unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"[stats] unknown message ~p~n", [ Message ]),
 	{ reply, ok, Stats }.
 
 handle_cast(Message,Stats) ->
-	io:format("[stats] unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"[stats] unknown message ~p~n", [ Message ]),
 	{ noreply, Stats }.
 
 handle_info(Message,Stats) ->
-	io:format("[stats] unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"[stats] unknown message ~p~n", [ Message ]),
 	{ noreply, Stats }.
 
 code_change(_Old,_Extra,Stats) ->

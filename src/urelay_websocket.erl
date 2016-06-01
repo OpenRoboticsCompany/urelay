@@ -19,15 +19,12 @@ close() ->
 	gen_server:call(?MODULE, close).
 
 relay(WebSocket,connected) ->
-	io:format("urelay_websocket:connected~n"),
 	gen_server:call(?MODULE, { connected, WebSocket });
 
 relay(WebSocket,closed) ->
-	io:format("urelay_websocket:closed~n"),
 	gen_server:call(?MODULE, { closed, WebSocket });
 
 relay(WebSocket,Data) ->
-	io:format("Relay called ~p~n", [ Data ]),
 	JSON = json:decode(Data),
 	UJSON = ujson:encode(JSON),
 	gen_server:call(?MODULE, { relay, WebSocket, UJSON }).
@@ -49,42 +46,51 @@ init([ Room, WSPort, Port ]) ->
 handle_call( close, _From, Relay ) ->
 	{ stop, closed, Relay };
 
-handle_call( { connected, WebSocket }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort }, websockets = WebSockets }) ->
-	io:format("[WSRelay] connected~n"),
+handle_call( { connected, WebSocket }, _From, Relay = #relay{ websockets = WebSockets }) ->
+	urelay_stats:increment(websockets),
+	urelay_stats:increment(websocket_connections),
+	urelay_log:log(?MODULE,"connected~n"),
 	 { reply, ok, Relay#relay{ websockets = sets:add_element(WebSocket,WebSockets) }};
 
-handle_call( { closed, WebSocket }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort }, websockets = WebSockets }) ->
-	io:format("[WSRelay] closed~n"),
+handle_call( { closed, WebSocket }, _From, Relay = #relay{ websockets = WebSockets }) ->
+	urelay_stats:decrement(websockets),
+	urelay_stats:increment(websocket_disconnects),
+	urelay_log:log(?MODULE,"closed~n"),
 	 { reply, ok, Relay#relay{ websockets = sets:del_element(WebSocket,WebSockets) }};
 
-
-handle_call({ relay, WebSocket, Data }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort }, websockets = WebSockets }) ->
-	io:format("[WSRelay] ~p to ~p:~p~n", [ Data, RoomIP, RoomPort ]),
+handle_call({ relay, _WebSocket, Data }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort } }) ->
+	urelay_log:log(?MODULE,"relay ~p to ~p:~p~n", [ Data, RoomIP, RoomPort ]),
 	gen_udp:send( Socket, RoomIP, RoomPort, Data ),
+	urelay_stats:add(websocket_bytes_in,size(Data)),
 	{ reply, ok, Relay };
 	
 handle_call(Message, _From, Relay ) ->
-	io:format("[WSRelay] Unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
 	{ reply, ok, Relay }.
 
 handle_cast(Message, Relay ) ->
-	io:format("[WSRelay] Unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
 	{ noreply, Relay }.
 
 handle_info({ udp, _Client, IPAddr, Port, Packet }, Relay = #relay{ websockets = WebSockets }) ->
+	urelay_log:log(?MODULE,"forward ~p from ~p:~p", [ Packet, IPAddr, Port ]),
 	{ UJSON, _Rem }= ujson:decode(Packet),
 	JSON = json:encode(UJSON),
-	[ websocket:send(W,JSON) || W <- sets:to_list(WebSockets) ],
+	[ forward(W,JSON) || W <- sets:to_list(WebSockets) ],
 	{ noreply, Relay };
 
 handle_info(Message,Relay) ->
-	io:format("[WSRelay] Unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
 	{ noreply, Relay }.
 
 terminate(Reason, #relay{ socket = Socket }) ->
 	gen_udp:close(Socket),
-	io:format("[WSRelay] Shutting down because ~p~n", [ Reason ]),
+	urelay_log:log(?MODULE,"shutting down because ~p~n", [ Reason ]),
 	ok.
 
 code_change(_Old, Relay, _Extra) ->
 	{ ok, Relay }.	
+
+forward(Socket,JSON) ->
+	urelay_stats:add(websocket_bytes_out,size(JSON)),	
+	websocket:send(Socket,JSON).

@@ -59,12 +59,13 @@ close(Room) ->
 %
 
 init([ Name, Port ]) ->
-	io:format("Starting room ~p on port ~p~n", [ Name, Port ]),
+	urelay_log:log(?MODULE,"Starting room ~p on port ~p~n", [ Name, Port ]),
 	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }, { recbuf, 65536} ]),
 	{ ok, #room{ name = Name, users = [], bans = [], peers = [], 
 		port = Port, socket = Socket }}.
 
 handle_call( { join, Id }, _From, Room = #room{ users = Users, bans = Bans }) ->
+	urelay_stats:increment(room_joins),
 	case lists:member( Id, Bans ) of
 		true ->
 			{ reply, { banned, Id }, Room };	
@@ -73,21 +74,26 @@ handle_call( { join, Id }, _From, Room = #room{ users = Users, bans = Bans }) ->
 	end;
 
 handle_call( { leave, Id }, _From, Room = #room{ users = Users }) ->
+	urelay_stats:increment(room_leaves),
 	{ reply, ok, Room#room{ users = users:delete(Id,Users) }};
 
 handle_call( { ban, Id }, _From, Room = #room{ users = Users, bans = Bans }) ->
+	urelay_stats:increment(room_bans),
 	{ reply, ok, Room#room{ 
 		users = lists:delete(Id,Users),
 		bans = [ Id | Bans ] }};
 
 handle_call( { unban, Id }, _From, Room = #room{ bans = Bans }) ->
+	urelay_stats:increment(room_unbans),
 	{ reply, ok, Room#room{ bans = lists:delete(Id,Bans) }};
 
 handle_call( { peer, Peer = #peer{} }, _From, Room = #room{ peers = Peers }) ->
+	urelay_stats:increment(room_peers),
 	{ reply, ok, Room#room{ peers = [ Peer | Peers ] }};
 
 handle_call( { message, #user{ ipaddr = IPAddr, port = Port }, Message }, _From, Room = #room{ socket = Socket }) ->
 	gen_udp:send(Socket,IPAddr,Port,Message),
+	urelay_stats:add(room_message_bytes_out, size(Message)),
 	{ reply, ok, Room };
 
 handle_call( { broadcast, Message }, _From, Room = #room{ 
@@ -116,13 +122,14 @@ handle_cast( _Message, Room ) ->
 	{ noreply, Room }.
 
 handle_info({ udp, _Client, IPAddr, Port, Packet }, Room = #room{ users = Users, bans = Bans, peers = Peers, socket = Socket }) ->
+	urelay_stats:add(room_bytes_in, size(Packet)),
 	case member(IPAddr,Port,Bans) of
-		true -> io:format("[Banned] ~p:~p ~p~n", [ IPAddr,Port,Packet]);
+		true -> urelay_log:log(?MODULE,"Banned ~p:~p ~p~n", [ IPAddr,Port,Packet]);
 		false -> false
 	end,
 	case member(IPAddr,Port,Users) of
 		true -> 
-			io:format("[Relay] ~p:~p ~p~n", [ IPAddr,Port,Packet]),
+			urelay_log:log(?MODULE,"Relay ~p:~p ~p~n", [ IPAddr,Port,Packet]),
 			[ broadcast(Socket,U,Packet) || U <- except(IPAddr,Port,Users) ],
 			[ relay(Socket,P,Packet) || P <- Peers];
 		false -> false
@@ -130,11 +137,11 @@ handle_info({ udp, _Client, IPAddr, Port, Packet }, Room = #room{ users = Users,
 	{ noreply, Room };
 
 handle_info( Message, Room ) ->
-	io:format("Got message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
 	{ noreply, Room }.
 
 terminate(Reason, #room{ name = Name } ) ->
-	io:format("Shutting down ~p because ~p~n", [ Name, Reason ]),
+	urelay_log:log(?MODULE,"Shutting down ~p because ~p~n", [ Name, Reason ]),
 	ok.
 
 code_change( _Old, Room, _Extra) ->
@@ -142,9 +149,13 @@ code_change( _Old, Room, _Extra) ->
 
 
 broadcast(Socket, #user{ ipaddr = IPAddr, port = Port }, Message ) ->
+	urelay_stats:increment(room_broadcasts),
+	urelay_stats:add(room_broadcast_bytes_out,size(Message)),
 	gen_udp:send(Socket,IPAddr,Port,Message).
 
 relay(Socket, #peer{ ipaddr = IPAddr, port = Port }, Message ) ->
+	urelay_stats:increment(room_relays),
+	urelay_stats:add(room_relay_bytes_out,size(Message)),
 	gen_udp:send(Socket,IPAddr,Port,Message).
 
 member(IPAddr,Port,Users) ->

@@ -14,17 +14,21 @@ accept(Listen) ->
 
 loop(Socket) ->
 	{ ok, { Address, Port }} = inet:peername(Socket),
+	urelay_log:log(?MODULE,"connection ~p:~p~n", [ Address, Port ]),
 	{ ok, Web } = file:read_file("ui.web"),
 	receive
 	{ tcp, Socket, Message } ->
-		io:format("~p:~p ~p~n", [ Address, Port, Message ]),
+		urelay_log:log("~p:~p ~p~n", [ Address, Port, Message ]),
+		urelay_stats:add(ui_client_bytes_in, size(Message)),	
 		Length = integer_to_binary(size(Web)),
-		gen_tcp:send(Socket,<<"HTTP/1.1 200 OK\nContent-Type: text/html\nConnection:close\nContent-Length: ", Length/binary, "\n\n", Web/binary >>),
-		loop(Socket); { tcp_closed, Socket } -> io:format("~p:~p closed~n", [ Address, Port ]);
+		Response = <<"HTTP/1.1 200 OK\nContent-Type: text/html\nConnection:close\nContent-Length: ", Length/binary, "\n\n", Web/binary >>,
+		gen_tcp:send(Socket,Message),
+		urelay_stats:add(ui_client_bytes_out, size(Response)),
+		loop(Socket); 
+	{ tcp_closed, Socket } -> 
+		urelay_log:log(?MODULE,"~p:~p closed~n", [ Address, Port ]);
 	{ error, closed } ->
-		io:format("~p closing~n", [ Socket ]); 
+		urelay_log:log(?MODULE,"~p closing~n", [ Socket ]); 
 	Message -> 
-		io:format("unknown message ~p~n", [ Message ])
+		urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ])
 	end.
-		
-		
