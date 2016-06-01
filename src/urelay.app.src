@@ -1,12 +1,22 @@
 {application, urelay,
  [
-  {description, ""},
+  {description, "ujson relay server"},
   {vsn, "1"},
   {registered, []},
   {applications, [
                   kernel,
                   stdlib
                  ]},
-  {mod, { urelay_app, []}},
-  {env, []}
+  {mod, { urelay_app, [
+	
+	]}},
+  {env, [
+	{ ui_http_port, 8880 },
+	{ ui_room_ipaddr, { 127,0,0,1 }},
+	{ ui_room_port, 5678 },
+	{ ui_websocket_port, 8888 },
+	{ ui_relay_port, 5677 },
+	{ api_port, 5676 },
+	{ log_file, "urelay.log" }
+	]}
  ]}.

@@ -8,7 +8,6 @@
 
 -record(ui, { socket, port, clients }).
 
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Public API
 %
@@ -41,7 +40,7 @@ handle_call(clients,_From,UI = #ui{ clients = Clients }) ->
 	{ reply, Clients, UI };
 
 handle_call(Message,_From,UI) ->
-	io:format("[UI] Unknown message ~p~n", [ Message ]),
+	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
 	{ reply, ok, UI }.
 
 handle_cast(accept,UI = #ui{ socket = Socket, clients = Clients }) ->

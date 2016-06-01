@@ -14,13 +14,13 @@
 %
 
 start_link(Port) ->
-	gen_server:start_link( { local, api }, ?MODULE, [ Port ], []).
+	gen_server:start_link( { local, ?MODULE }, ?MODULE, #api{ port = Port }, []).
 
 stop() ->
-	gen_server:call(api,stop).
+	gen_server:call(?MODULE,stop).
 
 rooms() ->
-	gen_server:call(api,rooms).
+	gen_server:call(?MODULE,rooms).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Private API
