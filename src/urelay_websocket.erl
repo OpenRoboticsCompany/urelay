@@ -7,6 +7,7 @@
 	init/1, terminate/2 ]).
 
 -record(relay, { room, wssuper, wsport, socket, port, websockets }).
+-record(user, { ipaddr, port, name }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Public Methods
@@ -34,9 +35,10 @@ relay(WebSocket,Data) ->
 %% Private Methods
 %%
 
-init([ Room, WSPort, Port ]) ->
+init([ { RoomName, _, _ } = Room, WSPort, Port ]) ->
 	{ ok, Super } = urelay_websocket_supervisor:start_link(WSPort),
 	{ ok, Socket } = gen_udp:open(Port, [ binary, { active, true }, { recbuf, 65536 }]),
+	urelay_room:join(RoomName, #user{ ipaddr = { 127, 0, 0, 1 }, port = Port, name = urelay_websocket }),
 	{ ok, #relay{
 		room = Room,
 		wssuper = Super, wsport = WSPort,
@@ -58,7 +60,7 @@ handle_call( { closed, WebSocket }, _From, Relay = #relay{ websockets = WebSocke
 	urelay_log:log(?MODULE,"closed~n"),
 	 { reply, ok, Relay#relay{ websockets = sets:del_element(WebSocket,WebSockets) }};
 
-handle_call({ relay, _WebSocket, Data }, _From, Relay = #relay{ socket = Socket , room = { RoomIP, RoomPort } }) ->
+handle_call({ relay, _WebSocket, Data }, _From, Relay = #relay{ socket = Socket , room = { _RoomName, RoomIP, RoomPort } }) ->
 	urelay_log:log(?MODULE,"relay ~p to ~p:~p~n", [ Data, RoomIP, RoomPort ]),
 	gen_udp:send( Socket, RoomIP, RoomPort, Data ),
 	urelay_stats:add(websocket_bytes_in,size(Data)),

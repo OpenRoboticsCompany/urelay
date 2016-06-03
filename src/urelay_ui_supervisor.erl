@@ -30,7 +30,7 @@ init([]) ->
 	#{
 		id => urelay_websocket,
 		start => { urelay_websocket, start_link, [ 
-			{UI_ROOM_IPADDR,UI_ROOM_PORT}, 
+			{ ui_room, UI_ROOM_IPADDR, UI_ROOM_PORT}, 
 			UI_WEBSOCKET_PORT, 
 			UI_RELAY_PORT ]},
 		restart => permanent,
