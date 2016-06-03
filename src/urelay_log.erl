@@ -2,7 +2,7 @@
 -author({ "David J Goehrig", "dave@dloh.org" }).
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
--export([ start_link/1, stop/0, log/3 ]).
+-export([ start_link/1, stop/0, log/3, log/2 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
@@ -17,6 +17,9 @@ start_link(File) ->
 
 log(Module,Format,Args) ->
 	gen_server:cast(?MODULE, { log, Module, Format, Args }).
+
+log(Module,Format) ->
+	gen_server:cast(?MODULE, { log, Module, Format, [] }).
 
 stop() ->
 	gen_server:call(?MODULE,stop).

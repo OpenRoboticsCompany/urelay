@@ -18,11 +18,11 @@ loop(Socket) ->
 	{ ok, Web } = file:read_file("ui.web"),
 	receive
 	{ tcp, Socket, Message } ->
-		urelay_log:log("~p:~p ~p~n", [ Address, Port, Message ]),
+		urelay_log:log(?MODULE,"~p:~p ~p~n", [ Address, Port, Message ]),
 		urelay_stats:add(ui_client_bytes_in, size(Message)),	
 		Length = integer_to_binary(size(Web)),
 		Response = <<"HTTP/1.1 200 OK\nContent-Type: text/html\nConnection:close\nContent-Length: ", Length/binary, "\n\n", Web/binary >>,
-		gen_tcp:send(Socket,Message),
+		gen_tcp:send(Socket,Response),
 		urelay_stats:add(ui_client_bytes_out, size(Response)),
 		loop(Socket); 
 	{ tcp_closed, Socket } -> 
