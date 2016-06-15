@@ -6,7 +6,7 @@
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
--record(urelay_log, { file, io }).
+-include("urelay.hrl").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Public APU

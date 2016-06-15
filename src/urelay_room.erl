@@ -3,16 +3,14 @@
 -copyright(<<"© 2016 David J Goehrig"/utf8>>).
 -behavior(gen_server).
 -export([ start_link/2, 
-	join/2, leave/2, ban/2, unban/2, peer/2,
-	message/3, broadcast/2, 
+	join/7, leave/2, ban/2, unban/2, peer/2,
+	message/3, broadcast/3, 
 	users/1, bans/1, peers/1,
-	close/1 ]).
+	close/1, nofilter/1 ]).
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
--record(peer, { ipaddr, port }).
--record(user, { ipaddr, port, name }).
--record(room, { name, users, bans, peers, socket, port }).
+-include("urelay.hrl").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Public API
@@ -20,8 +18,8 @@
 start_link(Room, Port) ->
 	gen_server:start_link({ local, Room }, ?MODULE, [ Room, Port ], []).
 
-join(Room,Id) ->
-	gen_server:call(Room, { join, Id }).
+join(Room, IPAddr, Port, Id, Module, Function, Args) ->
+	gen_server:call(Room, { join, #user{ ipaddr = IPAddr, port = Port, name = Id, filter_module = Module, filter_function = Function, filter_args = Args }}).
 
 leave(Room,Id) ->
 	gen_server:call(Room, { leave, Id }).
@@ -38,8 +36,8 @@ peer(Room,Peer) ->
 message(Room,Id,Message) ->
 	gen_server:call(Room, { message, Id, Message }).
 
-broadcast(Room,Message) ->
-	gen_server:call(Room, { broadcast, Message }).
+broadcast(Room,Id,Message) ->
+	gen_server:call(Room, { broadcast, Id, Message }).
 
 users(Room) ->
 	gen_server:call(Room, users).
@@ -70,12 +68,14 @@ handle_call( { join, Id }, _From, Room = #room{ users = Users, bans = Bans }) ->
 		true ->
 			{ reply, { banned, Id }, Room };	
 		false ->	
-			{ reply, ok, Room#room{ users = [ Id | Users ] } }
+			{ reply, ok, Room#room{ users = [ Id | lists:delete(Id,Users) ] } }
 	end;
 
 handle_call( { leave, Id }, _From, Room = #room{ users = Users }) ->
 	urelay_stats:increment(room_leaves),
-	{ reply, ok, Room#room{ users = users:delete(Id,Users) }};
+	Rem = lists:filter(fun(#user{ name = Name }) -> 
+		Name =/= Id end, Users), 
+	{ reply, ok, Room#room{ users = Rem }};
 
 handle_call( { ban, Id }, _From, Room = #room{ users = Users, bans = Bans }) ->
 	urelay_stats:increment(room_bans),
@@ -92,13 +92,15 @@ handle_call( { peer, Peer = #peer{} }, _From, Room = #room{ peers = Peers }) ->
 	{ reply, ok, Room#room{ peers = [ Peer | Peers ] }};
 
 handle_call( { message, #user{ ipaddr = IPAddr, port = Port }, Message }, _From, Room = #room{ socket = Socket }) ->
+	urelay_log:log(?MODULE,"sending to ~p:~p ~p~n", [ IPAddr, Port, Message ]),
 	gen_udp:send(Socket,IPAddr,Port,Message),
 	urelay_stats:add(room_message_bytes_out, size(Message)),
 	{ reply, ok, Room };
 
-handle_call( { broadcast, Message }, _From, Room = #room{ 
+handle_call( { broadcast, Id, Message }, _From, Room = #room{ 
 	users = Users, peers = Peers, socket = Socket }) ->
-	[ broadcast(Socket,U,Message) || U <- Users ],
+	Recipients = lists:filter( fun(#user{ name = Name }) -> Id =/= Name end, Users), 
+	[ forward(Socket,U,Message) || U <- Recipients ],
 	[ relay(Socket,P,Message) || P <- Peers ],
 	{ reply, ok, Room };
 
@@ -129,12 +131,15 @@ handle_info({ udp, _Client, IPAddr, Port, Packet }, Room = #room{ users = Users,
 	end,
 	case member(IPAddr,Port,Users) of
 		true -> 
-			urelay_log:log(?MODULE,"Relay ~p:~p ~p~n", [ IPAddr,Port,Packet]),
-			[ broadcast(Socket,U,Packet) || U <- except(IPAddr,Port,Users) ],
+			[ forward(Socket,U,Packet) || U <- except(IPAddr,Port,Users) ],
 			[ relay(Socket,P,Packet) || P <- Peers];
 		false -> false
 	end,
 	{ noreply, Room };
+
+handle_info({udp_error, Socket, Error}, State) ->
+	urelay_log:log(?MODULE,"socket ~p udp error ~p~n", [ Socket, Error ]),
+	{ noreply, State };
 
 handle_info( Message, Room ) ->
 	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
@@ -144,19 +149,27 @@ terminate(Reason, #room{ name = Name } ) ->
 	urelay_log:log(?MODULE,"Shutting down ~p because ~p~n", [ Name, Reason ]),
 	ok.
 
-code_change( _Old, Room, _Extra) ->
+code_change( Version, Room, _Extra) ->
+	urelay_log:log(?MODULE,"Loading ~p", [ Version ]),
 	{ ok, Room }.	
 
+send(Type,Stat,Socket,IPAddr,Port,Message) ->
+	urelay_log:log(?MODULE,"sending to ~p:~p ~p~n", [ IPAddr, Port, Message ]),
+	gen_udp:send(Socket,IPAddr,Port,Message),
+	urelay_stats:increment(Type),
+	urelay_stats:add(Stat,size(Message)).
 
-broadcast(Socket, #user{ ipaddr = IPAddr, port = Port }, Message ) ->
-	urelay_stats:increment(room_broadcasts),
-	urelay_stats:add(room_broadcast_bytes_out,size(Message)),
-	gen_udp:send(Socket,IPAddr,Port,Message).
+forward(Socket, #user{ ipaddr = IPAddr, port = Port, filter_module =  Module, filter_function = Function }, Message ) ->
+	Test = erlang:apply(Module,Function,[Message]) , 
+	case Test of
+		false ->
+			urelay_log:log(?MODULE,"discarded message ~p", [ Message ]);
+		_ ->
+			send(room_broadcasts,room_boadcast_bytes_out,Socket,IPAddr,Port,Message)
+	end.
 
 relay(Socket, #peer{ ipaddr = IPAddr, port = Port }, Message ) ->
-	urelay_stats:increment(room_relays),
-	urelay_stats:add(room_relay_bytes_out,size(Message)),
-	gen_udp:send(Socket,IPAddr,Port,Message).
+	send(room_replays,room_relay_bytes_out,Socket,IPAddr,Port,Message).
 
 member(IPAddr,Port,Users) ->
 	[] /= lists:filtermap( fun(#user{ ipaddr = I, port = P }) -> 
@@ -165,3 +178,6 @@ member(IPAddr,Port,Users) ->
 except(IPAddr,Port,Users) ->
 	lists:filtermap( fun(#user{ ipaddr = I, port = P }) ->
 		(I /= IPAddr) or (P /= Port) end, Users ).
+
+nofilter(_Message) ->
+	true.

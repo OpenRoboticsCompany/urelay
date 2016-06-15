@@ -25,6 +25,7 @@ start_link() ->
 init([]) ->
 	{ ok, LOG_FILE } = application:get_env(urelay,log_file),
 	{ ok, API_PORT } = application:get_env(urelay,api_port),
+	{ ok, WS_PORT } = application:get_env(urelay,ui_websocket_port),
 	{ok, { #{ strategy => one_for_one, intensity => 5,  period => 10}, [
 	#{	
 		id => urelay_log,
@@ -47,7 +48,13 @@ init([]) ->
 		shutdown => brutal_kill,
 		type => worker,
 		modules => [ urelay_stats ] },
-
+	#{	
+		id => urelay_websocket_supervisor,
+		start => { urelay_websocket_supervisor, start_link, [WS_PORT] },
+		restart => permanent,
+		shutdown => brutal_kill,
+		type => supervisor,
+		modules => [ urelay_websocket_supervisor, websocket_server ] },
 	#{
 		id => urelay_ui_supervisor,
 		start => { urelay_ui_supervisor, start_link, [] },

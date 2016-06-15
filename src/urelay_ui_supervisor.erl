@@ -8,10 +8,7 @@ start_link() ->
 
 init([]) ->
 	{ ok, UI_HTTP_PORT } = application:get_env(urelay,ui_http_port),
-	{ ok, UI_ROOM_IPADDR } = application:get_env(urelay,ui_room_ipaddr),
 	{ ok, UI_ROOM_PORT } = application:get_env(urelay,ui_room_port),
-	{ ok, UI_WEBSOCKET_PORT } = application:get_env(urelay,ui_websocket_port),
-	{ ok, UI_RELAY_PORT } = application:get_env(urelay,ui_relay_port),
 	{ ok, { #{ strategy => one_for_one, intensity => 1, period => 10}, [ 
 	#{ 
 		id => ui,
@@ -26,16 +23,6 @@ init([]) ->
 		restart => permanent,
 		shutdown => brutal_kill,
 		type => worker,
-		module => [ urelay_room ] },
-	#{
-		id => urelay_websocket,
-		start => { urelay_websocket, start_link, [ 
-			{ ui_room, UI_ROOM_IPADDR, UI_ROOM_PORT}, 
-			UI_WEBSOCKET_PORT, 
-			UI_RELAY_PORT ]},
-		restart => permanent,
-		shutdown => brutal_kill,
-		type => worker,
-		module => [ urelay_websocket, urelay_websocket_supervisor,urelay_room, websocket, websocket_rfc6455, websocket_server ] }
+		module => [ urelay_room ] }
 	]}}.
 

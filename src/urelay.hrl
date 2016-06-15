@@ -1,0 +1,10 @@
+-author({ "David J Goehrig", "dave@dloh.org" }).
+-copyright(<<"© 2016 David J Goehrig"/utf8>>).
+-record(peer, { ipaddr, port }).
+-record(user, { ipaddr, port, name, filter_module, filter_function, filter_args }).
+-record(room, { name, users, bans, peers, socket, port }).
+-record(relay, { websocket, socket, port, room, id }).
+-record(api, { socket, port, rooms, supervisor }).
+-record(urelay_log, { file, io }).
+-record(urelay_ui_server, { socket }).
+-record(stats, { windows, sizes }).

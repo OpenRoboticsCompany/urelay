@@ -6,7 +6,7 @@
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
--record(api, { socket, port, rooms, supervisor }).
+-include("urelay.hrl").
 -compile([debug_info]).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -89,6 +89,11 @@ dispatch(API = #api{ supervisor = Super, rooms = Rooms, socket = Socket },IPAddr
 			Message = ujson:encode([ "rooms", Rooms ]),
 			gen_udp:send(Socket,IPAddr,Port,Message),	
 			urelay_stats:add(api_bytes_out,size(Message)),
+			{ noreply, API };
+		"join" ->
+			[ Room, IP, Port, FilterModule, FilterFunction, FilterArgs] = Args,
+			urelay_room:join(Room, IP, Port, FilterModule, FilterFunction, FilterArgs),
+			urelay_stats:increment(api_room_joins),
 			{ noreply, API };
 		_ -> 
 			urelay_log:log(?MODULE,"unknown command ~p~n", [ Command ]),

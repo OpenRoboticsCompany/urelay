@@ -1,0 +1,175 @@
+<html>
+<head></head>
+<body style=" padding: 0; margin: 0"><canvas id="canvas"position: absolute; top: 0; left: 0; padding: 0; margin: 0">
+<script>
+// ui.js
+// © 2016 David J Goehrig
+//
+
+Renderer = function() {
+	var commands = Array.prototype.slice.apply(arguments,[0])
+	while(commands.length) {
+		var args = commands.slice(1)
+		var fun =  Renderer[commands[0]]
+		if (typeof(fun) == 'function')
+			commands = fun.apply(Renderer, args)
+	}
+}
+
+// Renderer viewport
+Renderer.v = function() {
+	this.viewport = {
+		x: arguments[0],
+		y: arguments[1],
+		w: arguments[2] || window.innerWidth,
+		h: arguments[3] || window.innerHeight
+	}
+	return Array.prototype.slice.apply(arguments,[4])
+}
+
+// widget extents 
+Renderer.w = function() {
+	// ignore the X Y W H of the widget
+	return Array.prototype.slice.apply(arguments,[4])
+}
+
+
+// path
+Renderer.p = function () {
+	this.context.stroke()
+	this.context.beginPath()
+	return Array.prototype.slice.apply(arguments,[0])
+}
+
+// lineTo
+Renderer.l = function () {
+	this.x = arguments[0]
+	this.y = arguments[1]
+	this.context.lineTo(this.x - this.viewport.x,
+		window.innerHeight - this.y + this.viewport.y)
+	return Array.prototype.slice.apply(arguments,[2])
+}
+
+// moveTo
+Renderer.m = function () {
+	this.x = arguments[0]
+	this.y = arguments[1]
+	this.context.moveTo(this.x - this.viewport.x,
+		window.innerHeight - this.y + this.viewport.y)
+	return Array.prototype.slice.apply(arguments,[2])
+}
+
+// fillRect
+Renderer.f = function () {
+	this.width = arguments[0]
+	this.height = arguments[1]
+	this.context.fillRect(this.x - this.viewport.x,
+		window.innerHeight - this.y - this.height + this.viewport.y
+		,this.width,this.height,this.foreground)
+	return Array.prototype.slice.apply(arguments,[2])
+}
+
+// clearRect
+Renderer.c = function () {
+	this.width = arguments[0]
+	this.height = arguments[1]
+	this.context.clearRect(this.x - this.viewport.x,
+		window.innerHeight - this.y - this.height + this.viewport.y,
+		this.width,this.height)
+	return Array.prototype.slice.apply(arguments,[2])
+}
+
+// foreground
+Renderer.fg = function () {
+	this.r = arguments[0]
+	this.g = arguments[1]
+	this.b = arguments[2]
+	this.a = arguments[3]
+	this.context.fillStyle = this.context.strokeStyle = 
+		'rgba(' + this.r + ',' + this.g + ',' + 
+		this.b + ',' + this.a + ')'
+	return Array.prototype.slice.apply(arguments,[4])
+}
+
+Renderer.bg = function () {
+	this.r = arguments[0]
+	this.g = arguments[1]
+	this.b = arguments[2]
+	this.a = arguments[3]
+	this.canvas.width = this.canvas.style.width = window.innerWidth
+	this.canvas.height = this.canvas.style.height = window.innerHeight
+	this.canvas.style.background = 
+		'rgba(' + this.r + ',' + this.g + ',' + 
+		this.b + ',' + this.a + ')'
+	return Array.prototype.slice.apply(arguments,[4])
+}
+
+Renderer.canvas = document.getElementById('canvas')
+Renderer.context = Renderer.canvas.getContext('2d')
+Renderer.canvas.width = window.innerWidth
+Renderer.canvas.height = window.innerHeight
+
+// set the viewport
+Renderer.v(0,0,window.innerWidth,window.innerHeight)
+
+Renderer.events = []
+
+Renderer.ws = new WebSocket('ws://' + document.location.hostname + ':8888/ui_room')
+Renderer.ws.onmessage = function(message) {
+	var widget = JSON.parse(message.data)
+	Renderer.events.push(widget)
+	// Renderer.apply(Renderer,widget)	
+}
+
+Mouse = {
+	over: function(e) {
+	},
+	move: function(e) { 
+		Renderer.ws.send(JSON.stringify([ "mouse", "move", e.clientX,  window.innerHeight - e.clientY]))
+	},
+	down: function(e) {
+		Renderer.ws.send(JSON.stringify([ "mouse", "down", e.button, e.clientX, window.innerHeight - e.clientY]))
+	},
+	up: function(e) {
+		Renderer.ws.send(JSON.stringify([ "mouse", "up", e.button, e.clientX, window.innerHeight - e.clientY]))
+	},
+	scroll: function(e) {
+		Renderer.ws.send(JSON.stringify([ "mouse", "scroll", e.wheelDeltaX, e.wheelDeltaY]))
+	}
+}
+	
+Renderer.canvas.addEventListener('mouseover',Mouse.over)
+Renderer.canvas.addEventListener('mousemove',Mouse.move)
+Renderer.canvas.addEventListener('mousedown',Mouse.down)
+Renderer.canvas.addEventListener('mouseup',Mouse.up)
+Renderer.canvas.addEventListener('mousewheel',Mouse.scroll)
+Renderer.canvas.addEventListener('onscroll',Mouse.scroll)
+
+
+var i = 0;
+Renderer.render = function() {
+	var e
+	for ( e = 0; e < Renderer.events.length; ++e) { 
+		Renderer.apply(Renderer,Renderer.events[e])	
+	}
+	Renderer.events = []
+	onFrame(Renderer.render)
+}
+
+onFrame = (function(){
+	return window.requestAnimationFrame	||
+	window.webkitRequestAnimationFrame	||
+	window.mozRequestAnimationFrame		||
+	function( callback ){
+		window.setTimeout(callback, 1000 / 60);
+	};
+})();
+
+window.onload = function() {
+	console.log(onFrame)
+	onFrame(Renderer.render)
+}
+
+</script>
+</body>
+</html>

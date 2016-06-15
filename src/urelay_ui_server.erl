@@ -6,7 +6,7 @@
 -export([ code_change/3, handle_call/3, handle_cast/2, handle_info/2, init/1,
 	terminate/2 ]).
 
--record(urelay_ui_server, {}).
+-include("urelay.hrl").
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Public API
@@ -24,8 +24,10 @@ stop() ->
 %
 
 init([]) ->
+	{ ok, Socket } = gen_udp:open(5680, [binary, { active, true }]),
+	urelay_room:join(ui_room, #user{ ipaddr = {127,0,0,1}, port = 5680, name = ui_server }),
 	spawn(?MODULE,update_timer,[]),
-	{ ok, #urelay_ui_server{}}.
+	{ ok, #urelay_ui_server{ socket = Socket }}.
 
 handle_call(stop,_From,State) ->
 	{ stop, stopped, State };
@@ -35,13 +37,23 @@ handle_call(Message,_From,State) ->
 	{ reply, ok, State }.
 
 handle_cast(update,State) ->
-	urelay_stats:dump(),	
+%%	ui:draw(ui:background([],0,0,0,255)),
+%%	urelay_stats:dump(),	
 	spawn(?MODULE,update_timer,[]),
 	{ noreply, State };
 
 handle_cast(Message,State) ->
 	io:format("[urelay_ui_server] unknown message ~p~n", [ Message ]),
 	{ noreply, State }.
+
+handle_info({ udp, Socket, IPAddr, Port, Message }, State ) ->
+	{ JSON, _Rest } = ujson:decode(Message),
+	case JSON of
+		[ <<"mouse">>, <<"move">>, X, Y ] -> ui:draw(ui:fill(ui:foreground(ui:moveTo(ui:clear([],20,20),X-10,Y-10),255,255,255,255),20,20));
+		[ <<"mouse">>, <<"down">>, Button, X, Y ] -> io:format("Click button ~p at ~p,~p~n", [ Button, X, Y ]);
+		_ -> true
+	end,
+	{ noreply, State };
 
 handle_info(Message,State) ->
 	io:format("[urelay_ui_server] unknown message ~p~n", [ Message ]),
