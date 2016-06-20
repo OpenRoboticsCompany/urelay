@@ -17,7 +17,7 @@ start_link(WebSocket,UUID) ->
 	gen_server:start_link({ local, UUID }, ?MODULE, [ WebSocket ], []).
 
 relay(WebSocket,connected) ->
-	UUID = list_to_atom(binary_to_list(websocket:uuid(WebSocket))),
+	UUID = websocket:uuid(WebSocket),
 	supervisor:start_child(urelay_websocket_supervisor, #{
 		id => UUID,
 		start => { urelay_websocket, start_link, [ WebSocket, UUID ] },
@@ -26,14 +26,13 @@ relay(WebSocket,connected) ->
 		worker => worker });
 
 relay(ID,closed) ->
-	UUID = list_to_atom(binary_to_list(ID)),
-	gen_server:call(UUID, closed );
+	gen_server:call(ID, closed );
 
 relay(WebSocket,Data) ->
-	UUID = list_to_atom(binary_to_list(websocket:uuid(WebSocket))),
+	ID = websocket:uuid(WebSocket),
 	JSON = json:decode(Data),
 	UJSON = ujson:encode(JSON),
-	gen_server:call(UUID, { relay, WebSocket, UJSON }).
+	gen_server:call(ID, { relay, WebSocket, UJSON }).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% Private Methods
@@ -67,7 +66,7 @@ handle_cast(Message, Relay ) ->
 	urelay_log:log(?MODULE,"unknown message ~p~n", [ Message ]),
 	{ noreply, Relay }.
 
-handle_info({ udp, _Client, _IPAddr, _Port, Packet }, Relay = #relay{ websocket = WebSocket, id = UUID }) ->
+handle_info({ udp, _Client, _IPAddr, _Port, Packet }, Relay = #relay{ websocket = WebSocket }) ->
 	{ UJSON, _Rem }= ujson:decode(Packet),
 	JSON = json:encode(UJSON),
 	urelay_stats:add(websocket_bytes_out,size(JSON)),
