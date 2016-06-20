@@ -13,6 +13,8 @@ Renderer = function() {
 		var fun =  Renderer[commands[0]]
 		if (typeof(fun) == 'function')
 			commands = fun.apply(Renderer, args)
+		else
+			commands = []	// we don't know how to process this message, so ignore it
 	}
 }
 
@@ -102,6 +104,22 @@ Renderer.bg = function () {
 		'rgba(' + this.r + ',' + this.g + ',' + 
 		this.b + ',' + this.a + ')'
 	return Array.prototype.slice.apply(arguments,[4])
+}
+
+Renderer.mouse = function() {
+	var event = arguments[0]
+	console.log("remote mouse", event)
+	switch(event) {
+		case "move":
+		case "scroll":
+			return Array.prototype.slice.apply(arguments,[3])
+		case "down":
+		case "up":
+			return Array.prototype.slice.apply(arguments,[4])
+		default:
+			console.log("unknown mouse")
+			return []
+	}
 }
 
 Renderer.canvas = document.getElementById('canvas')

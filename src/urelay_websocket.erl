@@ -17,9 +17,7 @@ start_link(WebSocket,UUID) ->
 	gen_server:start_link({ local, UUID }, ?MODULE, [ WebSocket ], []).
 
 relay(WebSocket,connected) ->
-	urelay_log:log(?MODULE,"Websocket connection ~p~n", [ WebSocket ]),
 	UUID = list_to_atom(binary_to_list(websocket:uuid(WebSocket))),
-	urelay_log:log(?MODULE,"Websocket uuid ~p~n", [ UUID ]),
 	supervisor:start_child(urelay_websocket_supervisor, #{
 		id => UUID,
 		start => { urelay_websocket, start_link, [ WebSocket, UUID ] },
@@ -28,9 +26,7 @@ relay(WebSocket,connected) ->
 		worker => worker });
 
 relay(ID,closed) ->
-	urelay_log:log(?MODULE,"websocket closed ~p~n", [ ID ]),
 	UUID = list_to_atom(binary_to_list(ID)),
-	urelay_log:log(?MODULE,"terminating ~p~n", [ UUID ]),
 	gen_server:call(UUID, closed );
 
 relay(WebSocket,Data) ->
@@ -53,10 +49,9 @@ init([WebSocket]) ->
 	urelay_room:join(Room,{127,0,0,1},Port,UUID, urelay_room, nofilter, []), 
 	urelay_stats:increment(websockets),
 	urelay_stats:increment(websocket_connections),
-	urelay_log:log(?MODULE,"connected~n"),
 	{ ok, #relay{ websocket = WebSocket, socket = Socket, port = Port, room =  Room, id = UUID }}.
 
-handle_call(closed, _From, Relay = #relay { id = UUID }) ->
+handle_call(closed, _From, Relay) ->
 	{ stop, normal, Relay };
 
 handle_call({ relay, WebSocket, Data }, _From, Relay = #relay{ websocket = WebSocket, room = Room, id = Id }) ->
@@ -75,7 +70,6 @@ handle_cast(Message, Relay ) ->
 handle_info({ udp, _Client, _IPAddr, _Port, Packet }, Relay = #relay{ websocket = WebSocket, id = UUID }) ->
 	{ UJSON, _Rem }= ujson:decode(Packet),
 	JSON = json:encode(UJSON),
-	urelay_log:log(?MODULE,"forwarding to ~p ~p~n", [ UUID, JSON ]),
 	urelay_stats:add(websocket_bytes_out,size(JSON)),
 	websocket:send(WebSocket,JSON),
 	{ noreply, Relay };

@@ -46,7 +46,7 @@ handle_cast(Message,State) ->
 	io:format("[urelay_ui_server] unknown message ~p~n", [ Message ]),
 	{ noreply, State }.
 
-handle_info({ udp, Socket, IPAddr, Port, Message }, State ) ->
+handle_info({ udp, _Socket, _IPAddr, _Port, Message }, State ) ->
 	{ JSON, _Rest } = ujson:decode(Message),
 	case JSON of
 		[ <<"mouse">>, <<"move">>, X, Y ] -> ui:draw(ui:fill(ui:foreground(ui:moveTo(ui:clear([],20,20),X-10,Y-10),255,255,255,255),20,20));

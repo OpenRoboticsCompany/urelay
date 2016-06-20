@@ -92,7 +92,6 @@ handle_call( { peer, Peer = #peer{} }, _From, Room = #room{ peers = Peers }) ->
 	{ reply, ok, Room#room{ peers = [ Peer | Peers ] }};
 
 handle_call( { message, #user{ ipaddr = IPAddr, port = Port }, Message }, _From, Room = #room{ socket = Socket }) ->
-	urelay_log:log(?MODULE,"sending to ~p:~p ~p~n", [ IPAddr, Port, Message ]),
 	gen_udp:send(Socket,IPAddr,Port,Message),
 	urelay_stats:add(room_message_bytes_out, size(Message)),
 	{ reply, ok, Room };
@@ -154,7 +153,6 @@ code_change( Version, Room, _Extra) ->
 	{ ok, Room }.	
 
 send(Type,Stat,Socket,IPAddr,Port,Message) ->
-	urelay_log:log(?MODULE,"sending to ~p:~p ~p~n", [ IPAddr, Port, Message ]),
 	gen_udp:send(Socket,IPAddr,Port,Message),
 	urelay_stats:increment(Type),
 	urelay_stats:add(Stat,size(Message)).
