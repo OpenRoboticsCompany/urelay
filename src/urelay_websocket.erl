@@ -18,6 +18,7 @@ start_link(WebSocket,UUID) ->
 
 relay(WebSocket,connected) ->
 	UUID = websocket:uuid(WebSocket),
+	urelay_log:log(?MODULE, "Connected websocket ~p~n", [ UUID ]),
 	supervisor:start_child(urelay_websocket_supervisor, #{
 		id => UUID,
 		start => { urelay_websocket, start_link, [ WebSocket, UUID ] },
@@ -39,9 +40,13 @@ relay(WebSocket,Data) ->
 %%
 
 init([WebSocket]) ->
+	urelay_log:log(?MODULE,"initializing for ~p~n", [ WebSocket ]),
 	{ ok, Socket } = gen_udp:open(0, [ binary, { active, true }, { recbuf, 65536 }, { reuseaddr, true }]),	 %% 0 means OS supply
+	urelay_log:log(?MODULE,"opened socket ~p~n", [ Socket ]),
 	{ ok, Port } = inet:port(Socket),
+	urelay_log:log(?MODULE,"socket port ~p~n", [ Port ]),
 	[ $/ | Path ] = websocket:path(WebSocket),
+	
 	Room = list_to_atom(Path),
 	UUID = websocket:uuid(WebSocket),
 	urelay_log:log(?MODULE,"connecting to ~p for id ~p ~n",  [ Room, UUID ]),

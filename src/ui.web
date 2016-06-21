@@ -134,6 +134,7 @@ Renderer.events = []
 
 Renderer.ws = new WebSocket('ws://' + document.location.hostname + ':8888/ui_room')
 Renderer.ws.onmessage = function(message) {
+	console.log(message.data)
 	var widget = JSON.parse(message.data)
 	Renderer.events.push(widget)
 	// Renderer.apply(Renderer,widget)	
