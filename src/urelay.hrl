@@ -7,4 +7,4 @@
 -record(api, { socket, port, rooms, supervisor }).
 -record(urelay_log, { file, io }).
 -record(urelay_ui_server, { socket }).
--record(stats, { windows, sizes }).
+-record(stats, { windows, sizes, timer, counter, per_second, per_minute, per_hour }).
